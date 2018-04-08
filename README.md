@@ -1,3 +1,3 @@
 # Single Image Reflection Removal   
-An Implementation of "[Single Image Reflection Removal Using Deep Encoder-Decoder Network](https://arxiv.org/abs/1802.00094)"via mxnet-gluon.   
+An Implementation of "[Stacked Conditional Generative Adversarial Networks for Jointly Learning Shadow Detection and Shadow Removal](https://arxiv.org/abs/1712.02478)"via mxnet-gluon.   
 **Ongoing**
