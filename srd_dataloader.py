@@ -34,7 +34,10 @@ class TripletAug(object):
         return warped_img
 
     def _resize(self, src):
-        return mx.nd.array(cv2.resize(src,(self.augsize, self.augsize),interpolation=cv2.INTER_CUBIC), mx.cpu())
+        res = mx.nd.array(cv2.resize(src,(self.augsize, self.augsize),interpolation=cv2.INTER_CUBIC), mx.cpu())
+        if src.ndim == 2:
+            res = mx.nd.expand_dims(res,axis=-1)
+        return res
 
     def __call__(self, triplet):
         shadow_img, mask_img, gt_img = triplet
@@ -62,7 +65,7 @@ class DatasetForSRD(gluon.data.dataset.Dataset):
         for shadow_fn, mask_fn, gt_fn in zip(shadow_fn_ls, mask_fn_ls, gt_fn_ls):
             shadow_img = mx.image.imread(os.path.join(shadow_dir, shadow_fn))
             shadow_img = mx.image.resize_short(src=shadow_img, size=self.short_size)
-            mask_img = mx.image.imread(os.path.join(mask_dir, mask_fn))
+            mask_img = mx.image.imread(os.path.join(mask_dir, mask_fn),flag=0)
             mask_img = mx.image.resize_short(src=mask_img, size=self.short_size)
             gt_img = mx.image.imread(os.path.join(gt_dir, gt_fn))
             gt_img = mx.image.resize_short(src=gt_img, size=self.short_size)
@@ -114,11 +117,23 @@ class BatchfyFunc4SRD(object):
     
     
     def _resize(self, src):
-        return mx.nd.array(cv2.resize(src, self.wh, interpolation=cv2.INTER_CUBIC), mx.cpu())
+        res = mx.nd.array(cv2.resize(src, self.wh,interpolation=cv2.INTER_CUBIC), mx.cpu())
+        if src.shape[2] == 1:
+            res = mx.nd.expand_dims(res,axis=-1)
+        return res
 
     def _norm_demean_dedev(self, src_triplet):
-        tensor_triplet = map(mx.nd.image.to_tensor, src_triplet)
-        normed_tensor_triplet = map(lambda x:mx.nd.image.normalize(x, mean=self.mean, std=self.std) , tensor_triplet) 
+        # tensor_triplet = map(mx.nd.image.to_tensor, src_triplet)
+        ternsor_shadow = mx.nd.image.to_tensor(src_triplet[0])
+        ternsor_mask = mx.nd.transpose(src_triplet[1], axes=(2,0,1)) / 255.0
+        ternsor_gt = mx.nd.image.to_tensor(src_triplet[2])
+        # normed_tensor_triplet = map(lambda x:mx.nd.image.normalize(x, mean=self.mean, std=self.std) , tensor_triplet) 
+        normed_tensor_triplet = (
+            mx.nd.image.normalize(ternsor_shadow, mean=self.mean, std=self.std),
+            ternsor_mask,
+            mx.nd.image.normalize(ternsor_gt, mean=self.mean, std=self.std),
+        )
+
         return normed_tensor_triplet
     
     def preprocess(self, src_triplet):
@@ -169,6 +184,27 @@ def getvisual(src, ifchannelswap=False, layout=None, mean=(0.485, 0.456, 0.406),
     if ifchannelswap:
         out_arr = cv2.cvtColor(out_arr, cv2.COLOR_BGR2RGB)
     return out_arr
+
+def getGrayVisual(src, layout=None,):
+    inv_imgs = map(lambda x:mx.nd.transpose(255.0 * x, axes=(1,2,0)), src)
+    inv_imgs = map(lambda x:mx.nd.clip(x, 0, 255), inv_imgs)
+
+    patch_rows, patch_cols = src.shape[2], src.shape[3]
+    # determin layout
+    if layout is None:
+        layout_cols, layout_rows = 1, src.shape[0]
+    else:
+        assert(layout[0] * layout[1] == src.shape[0])
+        layout_rows,layout_cols = layout
+    #
+    out_arr = np.zeros((layout_rows * src.shape[2], layout_cols * src.shape[3], src.shape[1]), dtype=np.uint8)
+    for i, inv_img in enumerate(inv_imgs):
+        r = i // layout_cols
+        c = i % layout_cols
+        out_arr[r*patch_rows:(r+1)*patch_rows,c*patch_cols:(c+1)*patch_cols,:] = inv_img.asnumpy()
+
+    return out_arr
+
 
 if __name__ == '__main__':
 
@@ -234,10 +270,7 @@ if __name__ == '__main__':
             batchify_fn=batchfy_func_plain,
             last_batch='discard'
         )
-        # show batch
-        # cv2.namedWindow('shadow',0)
-        # cv2.namedWindow('mask',0)
-        # cv2.namedWindow('gt',0)
+
         cv2.namedWindow('shadow')
         cv2.namedWindow('mask')
         cv2.namedWindow('gt')
@@ -245,7 +278,7 @@ if __name__ == '__main__':
         for i, triplet in enumerate(dl_train):
             shadow, mask, gt = triplet
             shadow_show = getvisual(shadow, ifchannelswap=True, layout=(batch_size/4,4))
-            mask_show = getvisual(mask, ifchannelswap=True, layout=(batch_size/4,4))
+            mask_show = getGrayVisual(mask, layout=(batch_size/4,4))
             gt_show = getvisual(gt, ifchannelswap=True, layout=(batch_size/4,4))
 
             cv2.imshow('shadow', shadow_show)

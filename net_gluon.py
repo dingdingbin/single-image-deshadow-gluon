@@ -321,37 +321,43 @@ class G2_Net(nn.HybridBlock):
         cvT11_out = self.cvT11(cvT11_in)
         return cvT11_out
 
-def get_D_net(slope=0.2, nfactor=1.0, **kwargs):
-    d_net = nn.HybridSequential(**kwargs)
-    with d_net.name_scope():
-        d_net.add(
-            nn.Conv2D(channels=intround(64* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 256->128
-            nn.LeakyReLU(alpha=slope),
-            nn.Conv2D(channels=intround(128* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 128->64
-            nn.BatchNorm(),
-            nn.LeakyReLU(alpha=slope),
-            nn.Conv2D(channels=intround(256* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 64->32
-            nn.BatchNorm(),
-            nn.LeakyReLU(alpha=slope),
-            nn.Conv2D(channels=intround(512* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 32->16
-            nn.BatchNorm(),
-            nn.LeakyReLU(alpha=slope),
-            nn.Conv2D(channels=intround(512* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 16->8
-            nn.BatchNorm(),
-            nn.LeakyReLU(alpha=slope),
-            nn.Conv2D(channels=intround(512* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 8->4
-            nn.BatchNorm(),
-            nn.LeakyReLU(alpha=slope),
-            nn.Conv2D(channels=intround(2), kernel_size=(4,4), strides=(1,1), padding=(0,0), use_bias=True),# 4->1
-        )
-    return d_net
-    
+class D_Net(nn.HybridBlock):
+    def __init__(self, slope=0.2, nfactor=1.0, **kwargs):
+        super(D_Net, self).__init__(**kwargs)
+        with self.name_scope():
+            self.d_net = nn.HybridSequential()
+            self.d_net.add(
+                nn.Conv2D(channels=intround(64* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 256->128
+                nn.LeakyReLU(alpha=slope),
+                nn.Conv2D(channels=intround(128* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 128->64
+                nn.BatchNorm(),
+                nn.LeakyReLU(alpha=slope),
+                nn.Conv2D(channels=intround(256* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 64->32
+                nn.BatchNorm(),
+                nn.LeakyReLU(alpha=slope),
+                nn.Conv2D(channels=intround(512* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 32->16
+                nn.BatchNorm(),
+                nn.LeakyReLU(alpha=slope),
+                nn.Conv2D(channels=intround(512* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 16->8
+                nn.BatchNorm(),
+                nn.LeakyReLU(alpha=slope),
+                nn.Conv2D(channels=intround(512* nfactor), kernel_size=(4,4), strides=(2,2), padding=(1,1), use_bias=True),# 8->4
+                nn.BatchNorm(),
+                nn.LeakyReLU(alpha=slope),
+                nn.Conv2D(channels=2, kernel_size=(4,4), strides=(1,1), padding=(0,0), use_bias=True),# 4->1
+                nn.Flatten()
+            )
+        return
+    def hybrid_forward(self, F, *args):
+        data_con = F.concat(*args, dim=1)
+        return self.d_net(data_con)
+
 if __name__ == '__main__':
     g1 = G1_Net(prefix='g1-')
     g2 = G2_Net(prefix='g2-')
 
-    d1 = get_D_net(prefix='d1-')
-    d2 = get_D_net(prefix='d2-')
+    d1 = D_Net(prefix='d1-')
+    d2 = D_Net(prefix='d2-')
 
     print('############## g1:')
     g1_sym = g1(mx.sym.Variable('data'))
@@ -364,12 +370,15 @@ if __name__ == '__main__':
         'data':(4,3,256,256)
     })
     print('############## d1:')
-    d1_sym = d1(mx.sym.Variable('data'))
+    d1_sym = d1(mx.sym.Variable('data'), mx.sym.Variable('mask'))
     mx.viz.print_summary(d1_sym,shape={
-        'data':(4,3,256,256)
+        'data':(4,3,256,256),
+        'mask':(4,1,256,256),
     })
     print('############## d2:')
-    d2_sym = d2(mx.sym.Variable('data'))
+    d2_sym = d2(mx.sym.Variable('data'), mx.sym.Variable('mask'), mx.sym.Variable('gt'))
     mx.viz.print_summary(d2_sym,shape={
-        'data':(7,3,256,256)
+        'data':(4,3,256,256),
+        'mask':(4,1,256,256),
+        'gt':(4,3,256,256),
     })
