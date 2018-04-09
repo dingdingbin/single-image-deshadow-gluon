@@ -295,8 +295,9 @@ class G2_Net(nn.HybridBlock):
                     nn.Activation('tanh')
                 )
             
-    def hybrid_forward(self, F, x):
-        cv0_out = self.cv0(x)
+    def hybrid_forward(self, F, x, mask):
+        conc_src = F.concat(x,mask,dim=1)
+        cv0_out = self.cv0(conc_src)
         cv1_out = self.cv1(cv0_out)
         cv2_out = self.cv2(cv1_out)
         cv3_out = self.cv3(cv2_out)
@@ -365,9 +366,10 @@ if __name__ == '__main__':
         'data':(4,3,256,256)
     })
     print('############## g2:')
-    g2_sym = g2(mx.sym.Variable('data'))
+    g2_sym = g2(mx.sym.Variable('data'),  mx.sym.Variable('mask'))
     mx.viz.print_summary(g2_sym,shape={
-        'data':(4,3,256,256)
+        'data':(4,3,256,256),
+        'mask':(4,1,256,256)
     })
     print('############## d1:')
     d1_sym = d1(mx.sym.Variable('data'), mx.sym.Variable('mask'))
